@@ -87,8 +87,7 @@ uint16_t aun_ir_buffer[100]; //infrared LED sensor data
 uint16_t aun_red_buffer[100];  //red LED sensor data
 
 int32_t n_ir_buffer_length; //data length
-int32_t n_spo2;  //SPO2 value
-int8_t ch_spo2_valid;  //indicator to show if the SPO2 calculation is valid
+
 int32_t n_heart_rate; //heart rate value
 int8_t  ch_hr_valid;  //indicator to show if the heart rate calculation is valid
 uint8_t uch_dummy;
@@ -114,7 +113,7 @@ void setup() {
     delay(1000);
   }
   uch_dummy=Serial.read();
-////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
   
   maxim_max30102_init();  //initialize the MAX30102
 }
@@ -148,10 +147,10 @@ void loop() {
   }
   un_prev_data=aun_red_buffer[i];
   //calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
-  maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_spo2, &ch_spo2_valid, &n_heart_rate, &ch_hr_valid); 
+  maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_heart_rate, &ch_hr_valid); 
 
   //Continuously taking samples from MAX30102.  Heart rate and SpO2 are calculated every 1 second
-  while(1)
+  while(1)    //while(persona)
   {
     i=0;
     un_min=0x3FFFF;
@@ -210,15 +209,10 @@ void loop() {
       Serial.print(n_heart_rate, DEC);
       
       Serial.print(F(", HRvalid="));
-      Serial.print(ch_hr_valid, DEC);
+      Serial.println(ch_hr_valid, DEC);
       
-      Serial.print(F(", SPO2="));
-      Serial.print(n_spo2, DEC);
-
-      Serial.print(F(", SPO2Valid="));
-      Serial.println(ch_spo2_valid, DEC);
     }
-    maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_spo2, &ch_spo2_valid, &n_heart_rate, &ch_hr_valid); 
+    maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_heart_rate, &ch_hr_valid); 
   }
 }
  
