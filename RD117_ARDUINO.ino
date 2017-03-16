@@ -78,6 +78,7 @@
  #include "algorithm.h"
  #include "max30102.h"
 
+//hola
 
  #define MAX_BRIGHTNESS 255
  #define MAX_DEVIATION 10
