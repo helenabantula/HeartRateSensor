@@ -147,6 +147,8 @@
 
    if (persona){
    //read the first 100 samples, and determine the signal range
+
+   // connect to server
    for(i=0;i<n_ir_buffer_length;i++)
    {
      while(digitalRead(10)==1);  //wait until the interrupt pin asserts
@@ -230,6 +232,11 @@
           }
        ////////////////////////////////////////////////////////////
 
+
+       //if (timer =>15){                   // El timer va amb una rutina d'interrupcio (clock del micro)
+       //
+       //client.send("Alive");
+       //}
        
        //send samples and calculation result to terminal program through UART
        Serial.print(F("red="));
@@ -249,5 +256,8 @@
    } // if(persona)
    else{
     delay(1000);
+    maxHR = 100;  
+    minHR = 60;
+    //disconnect client
    }
  }
