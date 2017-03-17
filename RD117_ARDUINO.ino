@@ -26,89 +26,46 @@
  * uint32_t          un_pmod_value
  * int32_t *         pn_pmod_value
  *
- * ------------------------------------------------------------------------- */
- /*******************************************************************************
- * Copyright (C) 2016 Maxim Integrated Products, Inc., All Rights Reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included
- * in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
- * IN NO EVENT SHALL MAXIM INTEGRATED BE LIABLE FOR ANY CLAIM, DAMAGES
- * OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
- *
- * Except as contained in this notice, the name of Maxim Integrated
- * Products, Inc. shall not be used except as stated in the Maxim Integrated
- * Products, Inc. Branding Policy.
- *
- * The mere transfer of this software does not imply any licenses
- * of trade secrets, proprietary technology, copyrights, patents,
- * trademarks, maskwork rights, or any other form of intellectual
- * property whatsoever. Maxim Integrated Products, Inc. retains all
- * ownership rights.
- *******************************************************************************
- */
- /*!\mainpage Main Page
- *
- * \section intro_sec Introduction
- *
- * This is the code documentation for the MAXREFDES117# subsystem reference design.
- * 
- *  The Files page contains the File List page and the Globals page.
- * 
- *  The Globals page contains the Functions, Variables, and Macros sub-pages.
- *
- * \image html MAXREFDES117_Block_Diagram.png "MAXREFDES117# System Block Diagram"
- * 
- * \image html MAXREFDES117_firmware_Flowchart.png "MAXREFDES117# Firmware Flowchart"
- *
  */
  #include <Arduino.h>
  #include "algorithm.h"
  #include "max30102.h"
 
 
- #define MAX_BRIGHTNESS 255
  #define MAX_DEVIATION 10
+ #define BUFFER_LENGTH 100 //buffer length of 100 stores 4 seconds of samples running at 25sps
+ #define HUMAN_YES 90000
+ #define HUMAN_NO 30000
 
- //Arduino Uno doesn't have enough SRAM to store 100 samples of IR led data and red led data in 32-bit format
- //To solve this problem, 16-bit MSB of the sampled data will be truncated.  Samples become 16-bit data.
- uint16_t aun_ir_buffer[100]; //infrared LED sensor data
- uint16_t aun_red_buffer[100];  //red LED sensor data
-
- int32_t n_ir_buffer_length; //data length
+ bool persona = false; 
+ uint32_t aun_ir_buffer[BUFFER_LENGTH]; //infrared LED sensor data
+ uint32_t red_Led = 0;  //red LED sensor data
 
  int32_t n_heart_rate; //heart rate value
  int8_t  ch_hr_valid;  //indicator to show if the heart rate calculation is valid
- uint8_t uch_dummy;
 
- int8_t  maxHR = 100;  
- int8_t  minHR = 60;
+ int8_t  maxHR = 120;  
+ int8_t  minHR = 50;
  int8_t  defaultHR = 80;
- bool persona = false; 
 
 
- // the setup routine runs once when you press reset:
- void setup() {
+// the setup routine runs once when you press reset:
+void setup() {
+   uint8_t uch_dummy;
 
-   maxim_max30102_reset(); //resets the MAX30102
-   // initialize serial communication at 115200 bits per second:
-   Serial.begin(115200);
-   pinMode(10, INPUT);  //pin D10 connects to the interrupt output pin of the MAX30102
-   pinMode(8, INPUT);  //pin D8 detects when there is somebody
-   delay(1000);
-   maxim_max30102_read_reg(REG_INTR_STATUS_1,&uch_dummy);  //Reads/clears the interrupt status register
+  //resets the MAX30102
+  maxim_max30102_reset(); 
+
+  //Init needed functionalities in Atmega328
+  Serial.begin(115200); //Initialize serial communication at 115200 bits per second
+  pinMode(10, INPUT);  //pin D10 connects to the interrupt output pin of the MAX30102
+  pinMode(8, INPUT);  //pin D8 detects when there is somebody
+  delay(1000);
+
+  //Reads/clears the interrupt status register in HR sensor
+  maxim_max30102_read_reg(REG_INTR_STATUS_1,&uch_dummy);
+
+
    
    ///////////Canviar loop while per espera de microruptor. Aixo ha de ser una rutina d'interrupcio: quan detecta persona, començo calcul al loop. Rutina interrupcio lligada amb hardware. 
    while(Serial.available()==0)  //wait until user presses a key
@@ -121,110 +78,72 @@
    }
    uch_dummy=Serial.read();
  ////////////////////////////////////////////////////////////////////////////////////////////////////
-   
-   maxim_max30102_init();  //initialize the MAX30102
- }
 
- // the loop routine runs over and over again forever:
- void loop() {
-   uint32_t un_min, un_max, un_prev_data, un_brightness;  //variables to calculate the on-board LED brightness that reflects the heartbeats
-   int32_t i;
-   float f_temp;
-   
-   un_brightness=0;
-   un_min=0x3FFFF;
-   un_max=0;
-   
-   n_ir_buffer_length=100;  //buffer length of 100 stores 4 seconds of samples running at 25sps
-   
-   if (digitalRead(8)==HIGH){
-       persona = true;
-     }
-   else{
-       persona = false;
-       }
+ //attachInterrupt(digitalPinToInterrupt(2),personaInt,CHANGE);
 
+ 
+  //Initialize the MAX30102
+  maxim_max30102_init();
+}
+
+
+void loop() {
+  
+  uint32_t dummy;
+  uint8_t i;
+ 
 
    if (persona){
    //read the first 100 samples, and determine the signal range
 
-   // connect to server
-   for(i=0;i<n_ir_buffer_length;i++)
+   //Begin connect to server and send HR defult
+
+   //End connect to server
+
+   //Read BUFFER_LENGTH*Sample Time seconds of data previous to make first HR estimation
+   for(i=0;i<BUFFER_LENGTH;i++)
    {
      while(digitalRead(10)==1);  //wait until the interrupt pin asserts
-     maxim_max30102_read_fifo((aun_red_buffer+i), (aun_ir_buffer+i));  //read from MAX30102 FIFO
+     maxim_max30102_read_fifo((&red_Led), (aun_ir_buffer+i));  //read from MAX30102 FIFO
      
-     if(un_min>aun_red_buffer[i])
-       un_min=aun_red_buffer[i];  //update signal min
-     if(un_max<aun_red_buffer[i])
-       un_max=aun_red_buffer[i];  //update signal max
      Serial.print(F("red="));
-     Serial.print(aun_red_buffer[i], DEC);
+     Serial.print(red_Led, DEC);
      Serial.print(F(", ir="));
      Serial.println(aun_ir_buffer[i], DEC);
    }
-   un_prev_data=aun_red_buffer[i];
+   
    //calculate heart rate after first 100 samples (first 4 seconds of samples)
-   maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_heart_rate, &ch_hr_valid); 
+   maxim_heart_rate(aun_ir_buffer, BUFFER_LENGTH, &n_heart_rate, &ch_hr_valid); 
 
-   //Continuously taking samples from MAX30102.  Heart rate is calculated every 1 second
+   //Comunicar HR???? FILTRAR???
+
+   //Continuously taking samples from MAX30102.  Heart rate is calculated every 1 second.
    while(persona)    //while(persona)
    {
-   if (digitalRead(8)==LOW){
-       persona = false;
-       break;
-     }
-     
-     i=0;
-     un_min=0x3FFFF;
-     un_max=0;
+      if (red_Led < HUMAN_NO){
+        persona = false;
+        break;
+      }
 
      //dumping the first 25 sets of samples in the memory and shift the last 75 sets of samples to the top
-     for(i=25;i<100;i++)
+     for(i=25;i<BUFFER_LENGTH;i++)
      {
-       aun_red_buffer[i-25]=aun_red_buffer[i];
        aun_ir_buffer[i-25]=aun_ir_buffer[i];
-
-       //update the signal min and max
-       if(un_min>aun_red_buffer[i])
-         un_min=aun_red_buffer[i];
-       if(un_max<aun_red_buffer[i])
-         un_max=aun_red_buffer[i];
      }
 
      //take 25 sets of samples before calculating the heart rate.
-     for(i=75;i<100;i++)
+     for(i=75;i<BUFFER_LENGTH;i++)
      {
-       un_prev_data=aun_red_buffer[i-1];
        while(digitalRead(10)==1);
-       digitalWrite(9, !digitalRead(9));
-       maxim_max30102_read_fifo((aun_red_buffer+i), (aun_ir_buffer+i));
+       maxim_max30102_read_fifo((&red_Led), (aun_ir_buffer+i));
 
-       //calculate the brightness of the LED
-       if(aun_red_buffer[i]>un_prev_data)
-       {
-         f_temp=aun_red_buffer[i]-un_prev_data;
-         f_temp/=(un_max-un_min);
-         f_temp*=MAX_BRIGHTNESS;
-         f_temp=un_brightness-f_temp;
-         if(f_temp<0)
-           un_brightness=0;
-         else
-           un_brightness=(int)f_temp;
-       }
-       else
-       {
-         f_temp=un_prev_data-aun_red_buffer[i];
-         f_temp/=(un_max-un_min);
-         f_temp*=MAX_BRIGHTNESS;
-         un_brightness+=(int)f_temp;
-         if(un_brightness>MAX_BRIGHTNESS)
-           un_brightness=MAX_BRIGHTNESS;
-       }
+
 
        /////////////////////////// POST FILTERING ////////////////
        if ((n_heart_rate < minHR) || (n_heart_rate > maxHR)){
           n_heart_rate = defaultHR;
+          //maxHR=maxHR+2;
+          //minHR=minHR-2;
         }
         else{
           maxHR = n_heart_rate + MAX_DEVIATION;
@@ -240,7 +159,7 @@
        
        //send samples and calculation result to terminal program through UART
        Serial.print(F("red="));
-       Serial.print(aun_red_buffer[i], DEC);
+       Serial.print(red_Led, DEC);
        Serial.print(F(", ir="));
        Serial.print(aun_ir_buffer[i], DEC);
        
@@ -251,13 +170,31 @@
        Serial.println(ch_hr_valid, DEC);
        
      }
-     maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_heart_rate, &ch_hr_valid); 
-   } //while(persona)
+     maxim_heart_rate(aun_ir_buffer, BUFFER_LENGTH, &n_heart_rate, &ch_hr_valid); 
+    } //while(persona)
    } // if(persona)
    else{
-    delay(1000);
-    maxHR = 100;  
-    minHR = 60;
+
+      Serial.println(persona);
+      Serial.println(red_Led);
+      for (i=0; i<4;i++){
+        while(digitalRead(10)==1);  //wait until the interrupt pin detects new data from sensor
+        maxim_max30102_read_fifo((&red_Led), (&dummy));  //read from MAX30102 FIFO  
+        Serial.println(red_Led);
+      }
+
+      if(red_Led >= HUMAN_YES){
+        maxHR = 120;  
+        minHR = 50;
+        persona = true;
+      }
+      if (!persona){
+          maxim_max30102_write_reg(REG_MODE_CONFIG,131);
+          delay(1500);
+          maxim_max30102_write_reg(REG_MODE_CONFIG,3);
+          delay(500);
+      }
+
     //disconnect client
    }
  }

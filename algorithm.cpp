@@ -60,77 +60,55 @@
 #include "algorithm.h"
 #include "arduino.h"
 
-//Arduino Uno doesn't have enough SRAM to store 100 samples of IR led data and red led data in 32-bit format
-//To solve this problem, 16-bit MSB of the sampled data will be truncated.  Samples become 16-bit data.
-void maxim_heart_rate_and_oxygen_saturation(uint16_t *pun_ir_buffer, int32_t n_ir_buffer_length, uint16_t *pun_red_buffer, int32_t *pn_heart_rate, int8_t *pch_hr_valid)
-/**
-* \brief        Calculate the heart rate and SpO2 level
-* \par          Details
-*               By detecting  peaks of PPG cycle and corresponding AC/DC of red/infra-red signal, the an_ratio for the SPO2 is computed.
-*               Since this algorithm is aiming for Arm M0/M3. formaula for SPO2 did not achieve the accuracy due to register overflow.
-*               Thus, accurate SPO2 is precalculated and save longo uch_spo2_table[] per each an_ratio.
-*
-* \param[in]    *pun_ir_buffer            - IR sensor data buffer
-* \param[in]    n_ir_buffer_length        - IR sensor data buffer length
-* \param[in]    *!_buffer           - Red sensor data buffer
-* \param[out]    *pn_heart_rate           - Calculated heart rate value
-* \param[out]    *pch_hr_valid            - 1 if the calculated heart rate value is valid
-*
-* \retval       None
-*/
+
+//Custom function for Arduino UNO only reading HR
+void maxim_heart_rate(uint32_t *irBuf, uint8_t bufLength, int32_t *heartRate, int8_t *hrValid)
 {
-  uint32_t un_ir_mean,un_only_once ;
-  int32_t k, n_i_ratio_count;
-  int32_t i, s, m, n_exact_ir_valley_locs_count, n_middle_idx;
-  int32_t n_th1, n_npks, n_c_min;   
-  int32_t an_ir_valley_locs[15] ;
-  int32_t n_peak_interval_sum;
+  uint32_t irMean; 
+  int32_t ir_valley_locs[15], th1, npks;
+  int32_t peak_interval_sum;
+  uint8_t k;      //no pot passar mai de 255
   
-  int32_t n_y_ac, n_x_ac;
-  int32_t n_spo2_calc; 
-  int32_t n_y_dc_max, n_x_dc_max; 
-  int32_t n_y_dc_max_idx, n_x_dc_max_idx; 
-  int32_t an_ratio[5], n_ratio_average; 
-  int32_t n_nume, n_denom ;
-
-  // calculates DC mean and subtract DC from ir
-  un_ir_mean =0; 
-  for (k=0 ; k<n_ir_buffer_length ; k++ ) un_ir_mean += pun_ir_buffer[k] ;
-  un_ir_mean =un_ir_mean/n_ir_buffer_length ;
+  //Calculates DC mean and subtract DC from ir
+  irMean=0; 
+  for(k=0; k<bufLength; k++) irMean += irBuf[k];
+  irMean=irMean/bufLength;
     
-  // remove DC and invert signal so that we can use peak detector as valley detector
-  for (k=0 ; k<n_ir_buffer_length ; k++ )  
-    an_x[k] = -1*(pun_ir_buffer[k] - un_ir_mean) ; 
+  //Remove DC and invert signal so that we can use peak detector as valley detector
+  for(k=0; k<bufLength; k++)  
+    an_x[k] = -1*(irBuf[k]-irMean); 
     
-  // 4 pt Moving Average
-  for(k=0; k< BUFFER_SIZE-MA4_SIZE; k++){
-    an_x[k]=( an_x[k]+an_x[k+1]+ an_x[k+2]+ an_x[k+3])/(int)4;        
+  //4 pt Moving Average
+  for(k=0; k<bufLength-MA4_SIZE; k++){
+    an_x[k]=(an_x[k]+an_x[k+1]+ an_x[k+2]+ an_x[k+3])/(int)4;        
   }
-  // calculate threshold  
-  n_th1=0; 
-  for ( k=0 ; k<BUFFER_SIZE ;k++){
-    n_th1 +=  an_x[k];
+  
+  //Calculate threshold  
+  th1=0; 
+  for(k=0; k<bufLength; k++){
+    th1 +=  an_x[k];
   }
-  n_th1=  n_th1/ ( BUFFER_SIZE);
-  if( n_th1<30) n_th1=30; // min allowed
-  if( n_th1>60) n_th1=60; // max allowed
+  th1=th1/(bufLength);
+  if(th1<30) th1=30; // min allowed
+  if(th1>60) th1=60; // max allowed
 
-  for ( k=0 ; k<15;k++) an_ir_valley_locs[k]=0;
+  for (k=0; k<15; k++) ir_valley_locs[k]=0;
   // since we flipped signal, we use peak detector as valley detector
-  maxim_find_peaks( an_ir_valley_locs, &n_npks, an_x, BUFFER_SIZE, n_th1, 4, 15 );//peak_height, peak_distance, max_num_peaks 
-  n_peak_interval_sum =0;
-  if (n_npks>=2){
-    for (k=1; k<n_npks; k++) n_peak_interval_sum += (an_ir_valley_locs[k] -an_ir_valley_locs[k -1] ) ;
-    n_peak_interval_sum =n_peak_interval_sum/(n_npks-1);
-    *pn_heart_rate =(int32_t)( (FS*60)/ n_peak_interval_sum );
-    *pch_hr_valid  = 1;
+  maxim_find_peaks(ir_valley_locs, &npks, an_x, bufLength, th1, 4, 15); //peak_height, peak_distance, max_num_peaks 
+  peak_interval_sum = 0;
+  if (npks>=2){
+    for (k=1; k<npks; k++) 
+      peak_interval_sum += (ir_valley_locs[k] -ir_valley_locs[k -1] );
+    peak_interval_sum =peak_interval_sum/(npks-1);
+    *heartRate =(int32_t)((FS*60)/peak_interval_sum );
+    *hrValid  = 1;
   }
-  else  { 
-    *pn_heart_rate = -999; // unable to calculate because # of peaks are too small
-    *pch_hr_valid  = 0;
+  else{ 
+    *heartRate = -1; // unable to calculate because # of peaks are too small
+    *hrValid  = 0;
   }
-
 }
+
 
 
 void maxim_find_peaks( int32_t *pn_locs, int32_t *n_npks,  int32_t  *pn_x, int32_t n_size, int32_t n_min_height, int32_t n_min_distance, int32_t n_max_num )
