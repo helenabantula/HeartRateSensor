@@ -78,7 +78,6 @@
  #include "algorithm.h"
  #include "max30102.h"
 
-//hola
 
  #define MAX_BRIGHTNESS 255
  #define MAX_DEVIATION 10
@@ -234,8 +233,8 @@
        ////////////////////////////////////////////////////////////
 
 
-       //if (timer =>15){                   // El timer va amb una rutina d'interrupcio (clock del micro)
-       //
+       //if (timer =>1){                   // El timer va amb una rutina d'interrupcio (clock del micro). Que envii a cada segon info?
+       //client.send("n_heart_rate");
        //client.send("Alive");
        //}
        
