@@ -46,41 +46,35 @@ volatile unsigned int vibra=0;
 
 /**
  * Interrupt from Timer 1 Compare Register A
- * It just increments timeCount to check conditions in main code
-**/
-ISR(TIMER1_COMPA_vect){
-  timeCount++;
-}
-
-
-/**
- * Interrupt from Timer 1 Compare Register B
+ * It increments timeCount to check conditions in main code
  * It checks for new data from Server
 **/
-ISR(TIMER1_COMPB_vect){
-  
+ISR(TIMER1_COMPA_vect){
+    timeCount++;
   if (client.connected()){
     if (client.available()){
       Serial.println("Inside client availabe");
-    char readedData = client.read();
-    //Serial.println(readedData);
-    if(readedData =='A' && vibra == 0){
-      vibra++; 
-      digitalWrite(8, HIGH);
-    }   
-    else if (vibra >= 2){
-      digitalWrite(8, LOW);
-      vibra = 0;
+      char readedData = client.read();
+      Serial.println(readedData);
+      if(readedData =='A' && vibra == 0){
+      //if(vibra == 19){
+        vibra++;
+        digitalWrite(8, HIGH);
+      }
+      else if(vibra > 1 ){
+        digitalWrite(8, LOW);
+        vibra=0;
+      }
+      else
+        vibra++;
+    }
   }
-    else if (vibra < 2)
-      vibra++;
-}
-}
 }
 
 
 /**
  * Setup function: this routine runs once when the sytem starts
+ *    -Disable general interrupts
  *    -Sets up timer 1 to provide:
  *        -On Channel A an interrupt at 5Hz. Used to check client connection and send 'Alive'
  *        -On Channel B an interrupt at 20Hz. Used to check for new data from Master
@@ -88,19 +82,21 @@ ISR(TIMER1_COMPB_vect){
  *    -Init serial communications (They are needed to connect Atmega328 to Ethernet shield using SPI)
  *    -Init Ethernet
  *    -Init HR sensor
+ *    -Enable general interrupts
  *
  *  Note clock speed is assumed to be 16MHz
 **/
 void setup() {
   uint8_t uch_dummy;
 
+  //Disable ALL interrupts
+  noInterrupts();
+
   //Set up Timer 1
   TCCR1A = 0;          // normal operation
   TCCR1B = bit(WGM12) | bit(CS10) | bit (CS12);   // CTC, scale to clock / 1024
-  OCR1A = 3125;       //compare A register value (clock speed / 1024 * 3125) -> Aprox 5Hz
-  //OCR1B =  781;       //compare A register value (clock speed / 1024 * 781) -> Aprox 20Hz
-  OCR1B =  390;       //compare A register value (clock speed / 1024 * 390) -> Aprox 40Hz
-  TIMSK1 = 6; //interrupt on Compare A and B Match (00000110)
+  OCR1A =  781;       //compare B register value (clock speed / 1024 * 781) -> Aprox 20Hz
+  TIMSK1 = 2; //interrupt on Compare A Match (00000110)
 
   //Configure I/O pins
   pinMode(9, INPUT);  //pin D9 connects to the interrupt output pin of the MAX30102
@@ -120,6 +116,11 @@ void setup() {
   maxim_max30102_read_reg(REG_INTR_STATUS_1,&uch_dummy);
   delay(100);
   maxim_max30102_init();
+
+  Serial.println("End configuration");
+    
+  //Enable Interrupts
+  interrupts();
 }
 
 
@@ -146,30 +147,33 @@ void loop(){
   String ID = "L";    //no pot ser un char, s'ha de poder sumar quan s'envia juntament amb HR
   
   if (!client.connected()){
-    Serial.println("Client NO connected");
-    if(timeCount>=50){  //This will be 10 seconds
-      noInterrupts();
+    //Serial.println("Client NO connected");
+    noInterrupts();
+    if(timeCount>=199){  //This will be 10 seconds
       timeCount=0;
-      interrupts();        
+      interrupts();
       Serial.println("Re-connecting");
       client.flush();
       client.stop();  //This waits by default 1 second
-      delay(50);
       client.connect(server, serverPort);
       maxim_max30102_write_reg(REG_MODE_CONFIG,131);
     }
+    else
+      interrupts();
   }
   else{
     Serial.println("Client connected");
     if(!persona){
       Serial.print("No persona");
-      if(timeCount>=150){  //This will be 30s
-        noInterrupts();
+      noInterrupts();
+      if(timeCount>=599){  //This will be 30s
         timeCount=0;
-        interrupts(); 
+        interrupts();
         Serial.println("Alive");
         client.println("Alive");
       }
+      else
+        interrupts();
       maxim_max30102_write_reg(REG_MODE_CONFIG,3);
       delay(350);
       for(i=0; i<4;i++){
@@ -182,8 +186,6 @@ void loop(){
         minHR = 50;
         persona = true;
         client.println("Y0");
-        //client.println("R300"); //no estressar el motor mentre calcula els 4s...
-        //fer algo amb el motor ----> usar delays?
       }
       else{
         maxim_max30102_write_reg(REG_MODE_CONFIG,131);

@@ -58,7 +58,7 @@
 */
 
 #include "algorithm.h"
-#include "arduino.h"
+//#include "arduino.h"
 
 
 //Custom function for Arduino UNO only reading HR

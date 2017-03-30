@@ -61,14 +61,14 @@
 */
 #ifndef ALGORITHM_H_
 #define ALGORITHM_H_
-#include <arduino.h>
+#include <Arduino.h>
 
-#define true 1
-#define false 0
+//#define true 1
+//#define false 0
 #define FS 25    //sampling frequency -- by default:25
 #define BUFFER_SIZE  (FS* 4) 
 #define MA4_SIZE  4 // DONOT CHANGE
-#define min(x,y) ((x) < (y) ? (x) : (y))
+//#define min(x,y) ((x) < (y) ? (x) : (y))
 
 static  int32_t an_x[ BUFFER_SIZE]; //ir
 static  int32_t an_y[ BUFFER_SIZE]; //red
