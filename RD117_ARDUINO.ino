@@ -37,7 +37,7 @@
  EthernetClient client;
  byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xCB, 0x2D};
  IPAddress ip(192, 168, 1, 177);
- IPAddress server(192, 168, 1, 109);
+ IPAddress server(192, 168, 1, 110);
  unsigned int  serverPort = 11999;
 
 

@@ -12,9 +12,13 @@
 
 
 EthernetClient client;
-byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xCB, 0x2D};
-IPAddress ip(192, 168, 1, 177);
-IPAddress server(192, 168, 1, 109);
+//byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xCB, 0x2D}; //Shield JMaria
+byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xD0, 0xB6}; //Shield L
+//byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xD0, 0x2F}; //Shield M
+//byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0x05, 0x61}; //Shield R
+
+IPAddress ip(192, 168, 1, 101);
+IPAddress server(192, 168, 1, 117);
 unsigned int  serverPort = 11999;
 
 
@@ -37,6 +41,7 @@ int8_t  minHR = 50;
 int8_t  defaultHR = 75;
 
 volatile unsigned int timeCount=0;
+volatile unsigned int vibra=0;
 
 
 /**
@@ -52,17 +57,25 @@ ISR(TIMER1_COMPA_vect){
  * Interrupt from Timer 1 Compare Register B
  * It checks for new data from Server
 **/
-ISR(TIMER1_COMPA_vect){
-  if(client.available()){
+ISR(TIMER1_COMPB_vect){
+  
+  if (client.connected()){
+    if (client.available()){
+      Serial.println("Inside client availabe");
     char readedData = client.read();
     //Serial.println(readedData);
-    if(readedData =='A'){
-      digitalWrite(8, HIGH);  
-      delay(100);     //Assegurar que està bé...
+    if(readedData =='A' && vibra == 0){
+      vibra++; 
+      digitalWrite(8, HIGH);
     }   
-    else
-    digitalWrite(8, LOW);
+    else if (vibra >= 2){
+      digitalWrite(8, LOW);
+      vibra = 0;
   }
+    else if (vibra < 2)
+      vibra++;
+}
+}
 }
 
 
@@ -70,7 +83,7 @@ ISR(TIMER1_COMPA_vect){
  * Setup function: this routine runs once when the sytem starts
  *    -Sets up timer 1 to provide:
  *        -On Channel A an interrupt at 5Hz. Used to check client connection and send 'Alive'
- *        -On Channel B an interrupt at 5Hz. Used to check for new data from Master
+ *        -On Channel B an interrupt at 20Hz. Used to check for new data from Master
  *    -Configure I/O pins. D9 for HR sensor interrupt. D8 for vibration motor control
  *    -Init serial communications (They are needed to connect Atmega328 to Ethernet shield using SPI)
  *    -Init Ethernet
@@ -85,7 +98,8 @@ void setup() {
   TCCR1A = 0;          // normal operation
   TCCR1B = bit(WGM12) | bit(CS10) | bit (CS12);   // CTC, scale to clock / 1024
   OCR1A = 3125;       //compare A register value (clock speed / 1024 * 3125) -> Aprox 5Hz
-  OCR1B = 3125;
+  //OCR1B =  781;       //compare A register value (clock speed / 1024 * 781) -> Aprox 20Hz
+  OCR1B =  390;       //compare A register value (clock speed / 1024 * 390) -> Aprox 40Hz
   TIMSK1 = 6; //interrupt on Compare A and B Match (00000110)
 
   //Configure I/O pins
@@ -112,7 +126,7 @@ void setup() {
 /**
  * Loop function: Called infinitely
  *    -If Ethernet client is NOT connected, we check the time elapsed from last check,
- *     and if it is >10seconds we try to connect again
+ *     and if it is >10seconds we try to connect again. The red led is turned off.
  *    -If Ethernet client is connected:
  *      -If there is no person touching the sensor
  *          -Check if we need to end an "Alive" signal. Done every 30 seconds 
@@ -129,30 +143,35 @@ void setup() {
 void loop(){
   uint32_t dummy;
   uint8_t i;
-  String ID = "R";    //no pot ser un char, s'ha de poder sumar quan s'envia juntament amb HR
+  String ID = "L";    //no pot ser un char, s'ha de poder sumar quan s'envia juntament amb HR
   
   if (!client.connected()){
+    Serial.println("Client NO connected");
     if(timeCount>=50){  //This will be 10 seconds
       noInterrupts();
       timeCount=0;
       interrupts();        
-      //Serial.println("Re-connecting");
+      Serial.println("Re-connecting");
       client.flush();
       client.stop();  //This waits by default 1 second
+      delay(50);
       client.connect(server, serverPort);
+      maxim_max30102_write_reg(REG_MODE_CONFIG,131);
     }
   }
   else{
+    Serial.println("Client connected");
     if(!persona){
+      Serial.print("No persona");
       if(timeCount>=150){  //This will be 30s
         noInterrupts();
         timeCount=0;
         interrupts(); 
-        //Serial.println("Alive");
+        Serial.println("Alive");
         client.println("Alive");
       }
-      //Serial.println(persona);
-      //Serial.println(red_Led);
+      maxim_max30102_write_reg(REG_MODE_CONFIG,3);
+      delay(350);
       for(i=0; i<4;i++){
         while(digitalRead(9)==1);  //wait until the interrupt pin detects new data from sensor
         maxim_max30102_read_fifo((&red_Led), (&dummy));  //read from MAX30102 FIFO  
@@ -169,11 +188,10 @@ void loop(){
       else{
         maxim_max30102_write_reg(REG_MODE_CONFIG,131);
         delay(1500);
-        maxim_max30102_write_reg(REG_MODE_CONFIG,3);
-        delay(500);
       }
     }
     else{
+      Serial.println("Si persona");
       //Read BUFFER_LENGTH*Sample Time seconds of data previous to make first HR estimation
       for(i=0;i<BUFFER_LENGTH;i++){
         while(digitalRead(9)==1);  //wait until the interrupt pin asserts
