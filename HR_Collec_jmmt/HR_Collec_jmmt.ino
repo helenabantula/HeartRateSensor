@@ -12,12 +12,12 @@
 
 
 EthernetClient client;
-//byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xCB, 0x2D}; //Shield JMaria
-byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xD0, 0xB6}; //Shield L
+byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xCB, 0x2D}; //Shield JMaria
+//byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xD0, 0xB6}; //Shield L
 //byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xD0, 0x2F}; //Shield M
 //byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0x05, 0x61}; //Shield R
 
-IPAddress ip(192, 168, 1, 101);
+IPAddress ip(192, 168, 1, 199);
 IPAddress server(192, 168, 1, 117);
 unsigned int  serverPort = 11999;
 
@@ -50,24 +50,30 @@ volatile unsigned int vibra=0;
  * It checks for new data from Server
 **/
 ISR(TIMER1_COMPA_vect){
-    timeCount++;
-  if (client.connected()){
-    if (client.available()){
-      Serial.println("Inside client availabe");
-      char readedData = client.read();
-      Serial.println(readedData);
-      if(readedData =='A' && vibra == 0){
-      //if(vibra == 19){
-        vibra++;
-        digitalWrite(8, HIGH);
+  timeCount++;
+  if(persona){
+    if(client.connected()){
+      if(client.available()){
+        //Serial.println("Inside client availabe");
+        char readedData = client.read();
+        //Serial.println(readedData);
+        if(readedData =='A' && vibra == 0){
+        //if(vibra == 19){
+          vibra++;
+          digitalWrite(8, HIGH);
+        }
       }
-      else if(vibra > 1 ){
-        digitalWrite(8, LOW);
-        vibra=0;
-      }
-      else
-        vibra++;
     }
+    if(vibra > 3){
+      digitalWrite(8, LOW);
+      vibra=0;
+    }
+    else if(vibra>0)
+      vibra++;
+  }
+  else{
+    digitalWrite(8, LOW);
+    vibra=0;
   }
 }
 
@@ -168,9 +174,9 @@ void loop(){
       noInterrupts();
       if(timeCount>=599){  //This will be 30s
         timeCount=0;
-        interrupts();
         Serial.println("Alive");
         client.println("Alive");
+        interrupts();
       }
       else
         interrupts();
@@ -185,7 +191,9 @@ void loop(){
         maxHR = 120;  
         minHR = 50;
         persona = true;
+        noInterrupts();
         client.println("Y0");
+        interrupts();
       }
       else{
         maxim_max30102_write_reg(REG_MODE_CONFIG,131);
@@ -215,14 +223,18 @@ void loop(){
         minHR = n_heart_rate - MAX_DEVIATION;
         if(minHR<ABS_HR_MIN) minHR=ABS_HR_MIN;
       }
-   
+
+      noInterrupts();   
       client.println(ID+n_heart_rate);
+      interrupts();
 
       //Continuously taking samples from MAX30102.  Heart rate is calculated every 1 second.
       while(persona && client.connected()){
         if(red_Led < HUMAN_NO){
           persona = false;
+          noInterrupts();   
           client.println("Z0");
+          interrupts();
           break;
         }
 
@@ -255,7 +267,9 @@ void loop(){
           minHR = n_heart_rate - MAX_DEVIATION;
           if(minHR<ABS_HR_MIN) minHR=ABS_HR_MIN;
         }
+        noInterrupts();   
         client.println(ID+n_heart_rate);
+        interrupts();
       }
     }
   }
