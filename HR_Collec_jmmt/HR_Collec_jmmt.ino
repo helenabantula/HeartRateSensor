@@ -13,11 +13,11 @@
 
 EthernetClient client;
 //byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xCB, 0x2D}; //Shield JMaria
-byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xD0, 0xB6}; //Shield L
+//byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xD0, 0xB6}; //Shield L
 //byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xD0, 0x2F}; //Shield M
-//byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0x05, 0x61}; //Shield R
+byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0x05, 0x61}; //Shield R
 
-IPAddress ip(192, 168, 1, 101);
+IPAddress ip(192, 168, 1, 103);
 IPAddress server(192, 168, 1, 117);
 unsigned int  serverPort = 11999;
 
@@ -61,7 +61,7 @@ ISR(TIMER1_COMPA_vect){
         vibra++;
         digitalWrite(8, HIGH);
       }
-      else if(vibra > 1 ){
+      else if(vibra > 2 ){
         digitalWrite(8, LOW);
         vibra=0;
       }
@@ -144,7 +144,7 @@ void setup() {
 void loop(){
   uint32_t dummy;
   uint8_t i;
-  String ID = "L";    //no pot ser un char, s'ha de poder sumar quan s'envia juntament amb HR
+  String ID = "R";    //no pot ser un char, s'ha de poder sumar quan s'envia juntament amb HR
   
   if (!client.connected()){
     //Serial.println("Client NO connected");
